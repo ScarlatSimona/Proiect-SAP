@@ -1,0 +1,490 @@
+*&---------------------------------------------------------------------*
+*&  Include           ZSS_PROIECT_FINAL3_TOP
+*&---------------------------------------------------------------------*
+*--------------------------------------------------------------------*
+*                         Types declaration                          *
+*--------------------------------------------------------------------*
+TYPES: ty_repartizare TYPE zss_repartizari_struct,
+       tt_repartizare TYPE zss_repartizari_tt,
+       ty_facultate TYPE zss_facultate_struct,
+       ty_student TYPE zss_student_struct,
+       ty_camine TYPE zss_camine_struct,
+       tt_student TYPE zss_student_tt,
+       ty_universitate TYPE zss_universitate_struct.
+*definire tip intern
+TYPES: BEGIN OF  ty_repartizare_add,
+       cod_repartizare TYPE zss_repartizari_struct-cod_repartizare,
+       id TYPE zss_facultate_struct-id,
+       nume TYPE zss_repartizari_struct-nume,
+       camin TYPE zss_repartizari_struct-camin,
+       camera TYPE zss_repartizari_struct-camera,
+       END OF ty_repartizare_add.
+TYPES: tt_repartizari TYPE ty_repartizare_add.
+
+
+
+
+
+*---------------------------------------------------------------------------*
+*            Data declaration                                               *
+*----------------------------------------------------------------------------*
+
+DATA:   ls_repartizare TYPE zss_repartizari,
+*        lt_repartizare TYPE tt_repartizare,
+*        ls_repartizare_add TYPE ty_repartizare_add,
+         result LIKE spell,
+         week LIKE scal-week,
+*        gs_facultate TYPE ty_facultate,
+*        gs_camine TYPE ty_camine,
+        gs_student TYPE ty_student,
+*       gs_repartizare TYPE ty_repartizare_add,
+       ls_student TYPE ty_student,
+       lt_student TYPE tt_student,
+       ls_universitate TYPE ty_universitate,
+       lt_universitate TYPE STANDARD TABLE OF zss_universitate,
+       wa_student TYPE zss_student_struct,
+       gf_student TYPE zss_student_struct,
+       gt_student TYPE zss_student_tt,
+       it_view TYPE TABLE OF zss_repartizari,
+       it_facultate TYPE TABLE OF zss_facultate,
+       it_camine TYPE TABLE OF zss_camine,
+       text TYPE string VALUE 'Alte-universitati-inregistrate-in-baza-de-date'.
+
+*--------------------------------------------------------------------------------*
+*                           Selection screen                                     *                                                       *
+*--------------------------------------------------------------------------------*
+
+
+SELECTION-SCREEN BEGIN OF SCREEN 100 AS SUBSCREEN.
+PARAMETERS:
+            p_an TYPE zss_repartizari_struct-an_studiu,  "Introduceti anul de studiu pentru care sa se faca afisarea
+            p_afis AS CHECKBOX,      "buton pentru afisarea repartizarii studentilor in camine
+            mynum TYPE i,        "parametru pentru a introduce o valoare
+            p_number AS CHECKBOX,  "buton care trebuie bifat pentru a se afisa in litere codul introdus
+            mydata TYPE zss_student_struct-data_nasterii, "parametru pt a introduce data curenta
+            cal AS CHECKBOX. "Calculeaza nr saptamanii
+
+SELECTION-SCREEN END OF SCREEN 100.
+
+SELECTION-SCREEN BEGIN OF SCREEN 200 AS SUBSCREEN.
+PARAMETERS: p_cod_s TYPE zss_student_struct-cod_student,   "Cod_student
+            p_cod_f TYPE zss_student_struct-cod_facultate,   "Cod facultate
+            p_cod_u TYPE zss_student_struct-cod_universitate,  "Cod universitate
+            p_nume TYPE zss_student_struct-nume,    "Nume student
+            p_prenum TYPE zss_student_struct-prenume,  "Prenume student
+            p_datan TYPE zss_student_struct-data_nasterii,  "Data nasterii a studentului
+            p_sex TYPE zss_student_struct-sex,   "Sexul studentului
+            p_media TYPE zss_student_struct-media,   "media studentului
+            p_insert RADIOBUTTON GROUP r1 USER-COMMAND md1,  "buton care atunci cand  e bifat se insereaza in baza de date un nou student si in tabela interna
+             p_cauta RADIOBUTTON GROUP r1, "buton care atunci cand e bifat cauta un student in baza de date si il afiseaza pe ecran
+            p_delete RADIOBUTTON GROUP r1,   "buton care atunci cand e bifat imi sterge un student din baza de date
+            p_modif RADIOBUTTON GROUP r1.  "buton care atunci cand e bifat imi modifica media pentru studentul al carui cod l-am introdus in parametru
+
+SELECTION-SCREEN END OF SCREEN 200.
+
+SELECTION-SCREEN BEGIN OF SCREEN 300 AS SUBSCREEN.
+PARAMETERS: p_u TYPE zss_universitate_struct-cod_universitate,   "Introducem codul universitatii pt care vrem sa se faca urmatoarele afisari
+            p_afisf AS CHECKBOX,   "Afiseaza facultatile universitatii
+            p_afisc AS CHECKBOX,  "Afiseaza caminele universitatii
+            p_c AS CHECKBOX. "Afiseaza celelalte universitati
+
+SELECTION-SCREEN END OF SCREEN 300.
+SELECTION-SCREEN: BEGIN OF TABBED BLOCK mytab FOR 13 LINES,
+                  TAB (20) button1 USER-COMMAND push1,  "Situatia repartizarilor
+                  TAB (20) button2 USER-COMMAND push2,   "Universitate
+                  TAB (20) button3 USER-COMMAND push3,   "Studenti
+                  END OF BLOCK mytab.
+
+
+*&---------------------------------------------------------------------*
+*&  Include           ZSS_PROIECT_FINAL3_E01
+*&---------------------------------------------------------------------*
+*------------------------------------------------------------------------------------*
+*                                Initialization                                      *
+*-------------------------------------------------------------------------------------*
+INITIALIZATION.
+perform initialization.
+
+*--------------------------------------------------------------------------------------------*
+*                                 At Selection screen                                           *
+*---------------------------------------------------------------------------------------------*
+AT SELECTION-SCREEN.
+  CASE sy-dynnr.
+    WHEN 1000.
+      CASE sy-ucomm.
+        WHEN 'PUSH1'.
+          mytab-dynnr = 100.
+        WHEN 'PUSH2'.
+          mytab-dynnr = 300.
+        WHEN 'PUSH3'.
+          mytab-dynnr = 200.
+      ENDCASE.
+  ENDCASE.
+
+
+
+  "sa-mi blocheze anumiti parametri atunci cand este bifat un anumit buton
+  "cand sunt bifate butoanele p_delete sau p_cauta, sa-mi blocheze tot in afara de cod_student
+
+AT SELECTION-SCREEN OUTPUT."PBO
+  LOOP AT SCREEN.
+    CASE screen-name.
+      WHEN 'P_COD_F' OR 'P_COD_U' OR 'P_NUME' OR 'P_PRENUM' OR 'P_DATAN'  OR 'P_SEX' OR 'P_MEDIA'.
+        IF p_delete = 'X' OR p_cauta = 'X'.
+          screen-input = 0.
+          MODIFY SCREEN.
+        ENDIF.
+    ENDCASE.
+  ENDLOOP.
+
+"cand este bifat butonul p_modif, sa-mi blocheze tot mai putin cod_student si p_media
+  LOOP AT SCREEN.
+    CASE screen-name.
+      WHEN 'P_COD_U' OR 'P_COD_F' OR 'P_NUME' OR 'P_PRENUM' OR 'P_DATAN' OR 'P_SEX'.
+        IF p_modif = 'X'.
+          screen-input = 0.
+          MODIFY SCREEN.
+        ENDIF.
+    ENDCASE.
+  ENDLOOP.
+
+* --------------------------------------------------------------------------*
+*                          Start of processing event                        *
+* ---------------------------------------------------------------------------*
+START-OF-SELECTION.
+
+"Afiseaza facultatile cand apasam butonul p_afisf cu alv
+  IF p_afisf = 'X'.
+    SELECT * FROM zss_facultate INTO TABLE it_facultate WHERE cod_universitate = p_u.
+
+    CALL FUNCTION 'REUSE_ALV_LIST_DISPLAY'
+     EXPORTING
+*         I_INTERFACE_CHECK              = ' '
+*         I_BYPASSING_BUFFER             =
+*         I_BUFFER_ACTIVE                = ' '
+*         I_CALLBACK_PROGRAM             = ' '
+*         I_CALLBACK_PF_STATUS_SET       = ' '
+*         I_CALLBACK_USER_COMMAND        = ' '
+       i_structure_name               = 'zss_facultate'
+*         IS_LAYOUT                      =
+*         IT_FIELDCAT                    =
+*         IT_EXCLUDING                   =
+*         IT_SPECIAL_GROUPS              =
+*         IT_SORT                        =
+*         IT_FILTER                      =
+*         IS_SEL_HIDE                    =
+*         I_DEFAULT                      = 'X'
+*         I_SAVE                         = ' '
+*         IS_VARIANT                     =
+*         IT_EVENTS                      =
+*         IT_EVENT_EXIT                  =
+*         IS_PRINT                       =
+*         IS_REPREP_ID                   =
+*         I_SCREEN_START_COLUMN          = 0
+*         I_SCREEN_START_LINE            = 0
+*         I_SCREEN_END_COLUMN            = 0
+*         I_SCREEN_END_LINE              = 0
+*         IR_SALV_LIST_ADAPTER           =
+*         IT_EXCEPT_QINFO                =
+*         I_SUPPRESS_EMPTY_DATA          = ABAP_FALSE
+*       IMPORTING
+*         E_EXIT_CAUSED_BY_CALLER        =
+*         ES_EXIT_CAUSED_BY_USER         =
+      TABLES
+        t_outtab                       = it_facultate
+*       EXCEPTIONS
+*         PROGRAM_ERROR                  = 1
+*         OTHERS                         = 2
+              .
+    IF sy-subrc <> 0.
+* MESSAGE ID SY-MSGID TYPE SY-MSGTY NUMBER SY-MSGNO
+*         WITH SY-MSGV1 SY-MSGV2 SY-MSGV3 SY-MSGV4.
+    ENDIF.
+
+
+    "Alta modalitate de a afisa datele fara alv
+*    WRITE: / 'Universitatea al carui cod l-ai introdus are urmatoarele facultati:'.
+*    SKIP.
+*    WRITE: sy-uline(80).
+*    WRITE: / '|', AT 5 'Cod facultate', AT 26 '|','Nume facultate', AT 80 '|'.
+*    SELECT cod_facultate nume
+*        FROM zss_facultate
+*        INTO CORRESPONDING FIELDS OF gs_facultate
+*        WHERE cod_universitate = p_u.
+*      WRITE: / sy-uline(80).
+*      WRITE: / '|',gs_facultate-cod_facultate UNDER 'Cod facultate', AT 26 '|',gs_facultate-nume UNDER 'Nume facultate', AT 80'|'.
+*    ENDSELECT.
+*    WRITE: / sy-uline(80).
+  ENDIF.
+
+"Afiseaza caminele cand apasam butonul p_afisc folosind alv
+  IF p_afisc = 'X'.
+
+    SELECT  * FROM zss_camine INTO TABLE it_camine WHERE cod_universitate = p_u.
+    CALL FUNCTION 'REUSE_ALV_LIST_DISPLAY'
+    EXPORTING
+*       I_INTERFACE_CHECK              = ' '
+*       I_BYPASSING_BUFFER             =
+*       I_BUFFER_ACTIVE                = ' '
+*       I_CALLBACK_PROGRAM             = ' '
+*       I_CALLBACK_PF_STATUS_SET       = ' '
+*       I_CALLBACK_USER_COMMAND        = ' '
+      i_structure_name               = 'ZSS_camine'
+*       IS_LAYOUT                      =
+*       IT_FIELDCAT                    =
+*       IT_EXCLUDING                   =
+*       IT_SPECIAL_GROUPS              =
+*       IT_SORT                        =
+*       IT_FILTER                      =
+*       IS_SEL_HIDE                    =
+*       I_DEFAULT                      = 'X'
+*       I_SAVE                         = ' '
+*       IS_VARIANT                     =
+*       IT_EVENTS                      =
+*       IT_EVENT_EXIT                  =
+*       IS_PRINT                       =
+*       IS_REPREP_ID                   =
+*       I_SCREEN_START_COLUMN          = 0
+*       I_SCREEN_START_LINE            = 0
+*       I_SCREEN_END_COLUMN            = 0
+*       I_SCREEN_END_LINE              = 0
+*       IR_SALV_LIST_ADAPTER           =
+*       IT_EXCEPT_QINFO                =
+*       I_SUPPRESS_EMPTY_DATA          = ABAP_FALSE
+*     IMPORTING
+*       E_EXIT_CAUSED_BY_CALLER        =
+*       ES_EXIT_CAUSED_BY_USER         =
+      TABLES
+        t_outtab                       = it_camine
+*     EXCEPTIONS
+*       PROGRAM_ERROR                  = 1
+*       OTHERS                         = 2
+              .
+    IF sy-subrc <> 0.
+* MESSAGE ID SY-MSGID TYPE SY-MSGTY NUMBER SY-MSGNO
+*         WITH SY-MSGV1 SY-MSGV2 SY-MSGV3 SY-MSGV4.
+    ENDIF.
+
+
+
+    "Afisarea catorva campuri din tabela ZSS_camine
+*    WRITE: / 'Universitatea al carui cod l-ai introdus ofera studentilor urmatoarele camine: '.
+*    SKIP.
+*    WRITE: sy-uline(30).
+*    WRITE: / '|', 'Cod camin', AT 15 '|','Nume camin', AT 30 '|'.
+*    SELECT cod_camin nume_camin FROM zss_camine INTO CORRESPONDING FIELDS OF gs_camine
+*     WHERE cod_universitate = p_u.
+*      WRITE: / sy-uline(30).
+*      WRITE: / '|',gs_camine-cod_camin UNDER 'Cod_camin', AT 15 '|',gs_camine-nume_camin UNDER 'Nume camin', AT 30'|'.
+*    ENDSELECT.
+*    WRITE: / sy-uline(30).
+  ENDIF.
+
+
+"cauta student si il afiseaza intr-o tabela interna atunci cand este apasat butonul p_cauta
+
+  IF p_cauta = 'X'.
+    SELECT SINGLE *
+          FROM zss_student INTO gs_student
+          WHERE cod_student = p_cod_s.
+
+    WRITE: gs_student-cod_student,
+           gs_student-cod_facultate,
+           gs_student-cod_universitate,
+           gs_student-nume,
+           gs_student-prenume,
+           gs_student-data_nasterii,
+           gs_student-sex,
+           gs_student-media.
+  ENDIF.
+
+"afiseaza situatia repartizarilor studentilor in camine folosind alv, in functie de anul de studiu introdus in parametru atunci cand este apasat butonul p_afis
+
+  IF p_afis = 'X'.
+    SELECT * FROM zss_repartizari INTO TABLE it_view WHERE an_studiu = p_an.
+    CALL FUNCTION 'REUSE_ALV_LIST_DISPLAY'
+    EXPORTING
+*         I_INTERFACE_CHECK              = ' '
+*         I_BYPASSING_BUFFER             =
+*         I_BUFFER_ACTIVE                = ' '
+*         I_CALLBACK_PROGRAM             = ' '
+*         I_CALLBACK_PF_STATUS_SET       = ' '
+*         I_CALLBACK_USER_COMMAND        = ' '
+       i_structure_name               = 'zss_repartizari'
+*         IS_LAYOUT                      =
+*         IT_FIELDCAT                    =
+*         IT_EXCLUDING                   =
+*         IT_SPECIAL_GROUPS              =
+*         IT_SORT                        =
+*         IT_FILTER                      =
+*         IS_SEL_HIDE                    =
+*         I_DEFAULT                      = 'X'
+*         I_SAVE                         = ' '
+*         IS_VARIANT                     =
+*         IT_EVENTS                      =
+*         IT_EVENT_EXIT                  =
+*         IS_PRINT                       =
+*         IS_REPREP_ID                   =
+*         I_SCREEN_START_COLUMN          = 0
+*         I_SCREEN_START_LINE            = 0
+*         I_SCREEN_END_COLUMN            = 0
+*         I_SCREEN_END_LINE              = 0
+*         IR_SALV_LIST_ADAPTER           =
+*         IT_EXCEPT_QINFO                =
+*         I_SUPPRESS_EMPTY_DATA          = ABAP_FALSE
+*       IMPORTING
+*         E_EXIT_CAUSED_BY_CALLER        =
+*         ES_EXIT_CAUSED_BY_USER         =
+      TABLES
+        t_outtab                       = it_view
+*       EXCEPTIONS
+*         PROGRAM_ERROR                  = 1
+*         OTHERS                         = 2
+              .
+    IF sy-subrc <> 0.
+* MESSAGE ID SY-MSGID TYPE SY-MSGTY NUMBER SY-MSGNO
+*         WITH SY-MSGV1 SY-MSGV2 SY-MSGV3 SY-MSGV4.
+    ENDIF.
+
+  ENDIF.
+
+"Insereaza un student nou in baza de date, apoi foloseste o tabela interna pentru a afisa tot ce se afla acum in baza de date folosind append pt inserarea
+"tuturor randurilor existente acum in baza de date
+  IF p_insert = 'X'.
+
+    wa_student-cod_student = p_cod_s.
+    wa_student-cod_facultate = p_cod_f.
+    wa_student-cod_universitate = p_cod_u.
+    wa_student-nume = p_nume.
+    wa_student-prenume = p_prenum.
+    wa_student-data_nasterii = p_datan.
+    wa_student-sex = p_sex.
+    wa_student-media = p_media.
+
+    INSERT zss_student FROM wa_student.
+
+
+    SELECT cod_student nume prenume data_nasterii sex media FROM zss_student INTO CORRESPONDING FIELDS OF
+    gf_student.
+      APPEND gf_student TO gt_student.
+      WRITE:/ gf_student-cod_student, gf_student-nume, gf_student-prenume, gf_student-data_nasterii,
+             gf_student-sex, gf_student-media.
+    ENDSELECT.
+  ENDIF.
+
+"Sterge studentul al carui cod este introdus, din baza de date
+  IF p_delete = 'X'.
+    DELETE FROM zss_student WHERE cod_student = p_cod_s.
+  ENDIF.
+
+"Modifica media studentului al carui cod este introdus  de la tastatura atunci cand este apasat butonul p_modif, dupa care face o selectie din baza de date
+"intr-o tabela interna folosind insert pe tabela interna a tututor randurilor din tabela
+  IF p_modif = 'X'.
+    UPDATE zss_student SET  media = p_media WHERE cod_student = p_cod_s.
+    WRITE: 'S-a modificat media studentului cu codul:',p_cod_s.
+    SKIP.
+    SKIP.
+    SELECT SINGLE * FROM zss_student INTO CORRESPONDING FIELDS OF ls_student WHERE cod_student = p_cod_s.
+    WRITE: / ls_student-nume, ls_student-prenume, ls_student-media.
+    WRITE: / 'Dupa modificarile facute, noua lista a studentilor este:'.
+    SKIP.
+    SKIP.
+    SKIP.
+    SELECT * FROM zss_student INTO CORRESPONDING FIELDS OF ls_student.
+      INSERT ls_student INTO TABLE lt_student.
+      WRITE: / ls_student-cod_student,
+              ls_student-nume,
+              ls_student-prenume,
+              ls_student-data_nasterii,
+              ls_student-sex,
+              ls_student-media.
+    ENDSELECT.
+  ENDIF.
+
+
+
+
+"atunci cand este apasat butonul p_c, imi ia textul care are in loc de spatiu '-'din data space si imi inlocuieste fiecare - cu un spatiu, apoi il afiseaza
+"pe ecran
+"imi insereaza in tabela interna inregistrari duplicate din tabela zss_universitate, dupa care imi sterge din tabela interna inregistrarea care are cod universitate
+"introdus, si imi sterge inregistrarile duplicate si afiseaza pe ecran.
+  IF p_c = 'X'.
+    WHILE sy-subrc = 0.
+      REPLACE '-' WITH space INTO text.
+    ENDWHILE.
+    WRITE: / text.
+    SKIP.
+    DO 2 TIMES.
+      SELECT nume cod_universitate FROM zss_universitate INTO CORRESPONDING FIELDS OF TABLE lt_universitate.
+    ENDDO.
+    DELETE lt_universitate WHERE cod_universitate = p_u.
+    DELETE ADJACENT DUPLICATES FROM lt_universitate COMPARING cod_universitate.
+    LOOP AT lt_universitate INTO ls_universitate.
+      WRITE: / ls_universitate-nume.
+    ENDLOOP.
+  ENDIF.
+
+  IF p_number = 'X'.
+    CALL FUNCTION 'SPELL_AMOUNT'
+     EXPORTING
+      amount          = mynum
+*     CURRENCY        = ' '
+*     FILLER          = ' '
+      language        = sy-langu
+     IMPORTING
+       in_words        = result
+*   EXCEPTIONS
+*     NOT_FOUND       = 1
+*     TOO_LARGE       = 2
+*     OTHERS          = 3
+              .
+    IF sy-subrc <> 0.
+      WRITE: / sy-subrc.
+    ELSE.
+      WRITE: 'The amount in words is: ',result-word.
+
+    ENDIF.
+  ENDIF.
+
+  IF cal = 'X'.
+    CALL FUNCTION 'DATE_GET_WEEK'
+      EXPORTING
+        date               = mydata
+    IMPORTING
+       week               = week
+*   EXCEPTIONS
+*     DATE_INVALID       = 1
+*     OTHERS             = 2
+              .
+    IF sy-subrc <> 0.
+      WRITE sy-subrc.
+    ELSE.
+      WRITE: 'Anul si numarul saptamnii din an in format YYYYMM:', week.
+    ENDIF.
+  ENDIF.
+*  -----------------------------------------------------------------------------------------*
+*  End of processing event
+*  -----------------------------------------------------------------------------------------*
+END-OF-SELECTION.
+
+*&---------------------------------------------------------------------*
+*&  Include           ZSS_PROIECT_FINAL3_F01
+*&---------------------------------------------------------------------*
+
+*&---------------------------------------------------------------------*
+*&      Form  INITIALIZATION
+*&---------------------------------------------------------------------*
+*       text
+*----------------------------------------------------------------------*
+*  -->  p1        text
+*  <--  p2        text
+*----------------------------------------------------------------------*
+form INITIALIZATION .
+  button1 = 'Afiseaza repartizare'.
+  button2 = 'Universitate'.
+  button3 = 'Studenti'.
+  mytab-prog = sy-repid.
+  mytab-dynnr = 100.
+  mytab-activetab = 'PUSH1'.
+
+endform.                    " INITIALIZATION
